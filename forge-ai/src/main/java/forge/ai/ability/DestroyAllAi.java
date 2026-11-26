@@ -66,6 +66,26 @@ public class DestroyAllAi extends SpellAbilityAi {
             ComputerUtilCost.setMaxXValue(sa, ai, sa.isTrigger());
         }
 
+        // A sweeper that hits everyone, with several opponents: weigh what all of them lose, not the first one's board alone
+        // (the loop below returns on the first opponent, so a wipe was turned down whenever that one had little).
+        if (!sa.usesTargeting() && ai.getOpponents().size() > 1) {
+            CardCollection opps = CardLists.filter(CardLists.getValidCards(ai.getOpponents().getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa), predicate);
+            CardCollection mine = CardLists.filter(CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa), predicate);
+            if (CardLists.getNotType(opps, "Creature").isEmpty()) {
+                opps = ComputerUtilCard.withoutHarmlessCreatures(ai, opps);
+            }
+            boolean creaturesOnly = CardLists.getNotType(opps, "Creature").isEmpty() && CardLists.getNotType(mine, "Creature").isEmpty();
+            boolean landsOnly = CardLists.getNotType(opps, "Land").isEmpty() && CardLists.getNotType(mine, "Land").isEmpty();
+            if (!opps.isEmpty() && !landsOnly) {
+                int theirs = creaturesOnly ? ComputerUtilCard.evaluateCreatureList(opps) : ComputerUtilCard.evaluatePermanentList(opps);
+                int ours = creaturesOnly ? ComputerUtilCard.evaluateCreatureList(mine) : ComputerUtilCard.evaluatePermanentList(mine);
+                if (ComputerUtilCard.sweeperPaysOff(theirs, ours, creaturesOnly ? 250 : 6)
+                        || (theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa))) {
+                    return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+                }
+            }
+        }
+
         // TODO should probably sort results when targeted to use on biggest threat instead of first match
         for (Player opponent: ai.getOpponents()) {
             CardCollection opplist = CardLists.getValidCards(opponent.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);

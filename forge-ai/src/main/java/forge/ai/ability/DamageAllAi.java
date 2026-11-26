@@ -101,7 +101,16 @@ public class  DamageAllAi extends SpellAbilityAi {
 
     private int evaluateDamageAll(Player ai, SpellAbility sa, final Card source, int dmg) {
         final Player opp = ai.getWeakestOpponent();
+        // damage to every creature hits every opponent's board, not only the weakest opponent's
+        final boolean everyone = !sa.usesTargeting() && ai.getOpponents().size() > 1;
         final CardCollection humanList = getKillableCreatures(sa, opp, dmg);
+        if (everyone) {
+            for (Player o : ai.getOpponents()) {
+                if (o != opp) {
+                    humanList.addAll(getKillableCreatures(sa, o, dmg));
+                }
+            }
+        }
         CardCollection computerList = getKillableCreatures(sa, ai, dmg);
 
         if (sa.usesTargeting() && sa.canTarget(opp)) {
@@ -169,8 +178,14 @@ public class  DamageAllAi extends SpellAbilityAi {
             minGain = 126; // prepare for attack
         }
 
-        return ComputerUtilCard.evaluateCreatureList(humanList) - ComputerUtilCard.evaluateCreatureList(computerList)
-                - minGain;
+        final int theirs = ComputerUtilCard.evaluateCreatureList(humanList), ours = ComputerUtilCard.evaluateCreatureList(computerList);
+        if (everyone && !sa.getPayCosts().isReusuableResource()) {
+            if (ComputerUtilCard.sweeperPaysOff(theirs, ours, Math.max(minGain, 250))) {
+                return theirs - ours;
+            }
+            return theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa) ? 1 : -1;
+        }
+        return theirs - ours - minGain;
     }
 
     @Override

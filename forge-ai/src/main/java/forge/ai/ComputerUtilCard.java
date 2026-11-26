@@ -922,6 +922,28 @@ public class ComputerUtilCard {
         return Aggregates.sum(list, creatureEvaluator);
     }
 
+    /**
+     * A sweeper that hits every player, in a game with several opponents: worth it when what all opponents lose together beats
+     * what we lose by the margin and is at least twice our loss. Judged against one opponent, the AI held its wipes while the
+     * two others ran away with the game; a wipe that costs us as much as it costs one of three opponents still leaves two ahead.
+     */
+    public static boolean sweeperPaysOff(final int theirs, final int ours, final int margin) {
+        return theirs > ours + margin && theirs >= 2 * ours;
+    }
+
+    /** At the end of its own turn with more cards than its hand may keep, a sweeper that comes out ahead beats a discard. */
+    public static boolean wouldDiscardAtCleanup(final Player ai, final SpellAbility sa) {
+        final forge.game.phase.PhaseHandler ph = ai.getGame().getPhaseHandler();
+        if (!ph.isPlayerTurn(ai) || ph.getPhase().isBefore(forge.game.phase.PhaseType.MAIN2)) {
+            return false;
+        }
+        int hand = ai.getCardsIn(forge.game.zone.ZoneType.Hand).size();
+        if (sa.isSpell() && sa.getHostCard().isInZone(forge.game.zone.ZoneType.Hand)) {
+            hand--;   // casting it takes it out of the hand
+        }
+        return ai.getMaxHandSize() >= 0 && hand >= ai.getMaxHandSize();
+    }
+
     public static Map<String, Integer> evaluateCreatureListByName(final CardCollectionView list) {
         // Compute value for each possible target
         return list.stream().collect(Collectors.groupingBy(Card::getName, Collectors.summingInt(c -> evaluateCreature(c))));
@@ -1550,7 +1572,16 @@ public class ComputerUtilCard {
             threat += 0.5f * costTarget / opp.getLandsInPlay().size();   //set back opponent's mana
         }
 
+        // an opponent's commander is the engine its deck is built around: players spend removal on it when it is out
+        if (c.isCommander() && c.getController().isOpponentOf(ai)) {
+            threat = Math.max(threat, 0.6f);
+        }
+
         final float valueNow = Math.max(valueTempo, threat);
+        // the hand is over its limit at the end of the AI's own turn: a removal spell held now is a card discarded
+        if (valueNow >= 0.1f && wouldDiscardAtCleanup(ai, sa)) {
+            return true;
+        }
         if (valueNow < 0.2) { //hard floor to reduce ridiculous odds for instants over time
             return false;
         }

@@ -71,7 +71,10 @@ public class PumpAllAi extends PumpAiBase {
         final String valid = sa.getParamOrDefault("ValidCards", "");
 
         CardCollection comp = CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
-        CardCollection human = CardLists.getValidCards(opp.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
+        // a -X/-X to every creature hits every opponent's board, not only the strongest opponent's
+        final boolean everyone = sa.isCurse() && ai.getOpponents().size() > 1;
+        CardCollection human = CardLists.getValidCards((everyone ? ai.getOpponents().getCardsIn(ZoneType.Battlefield) : opp.getCardsIn(ZoneType.Battlefield)),
+                valid, source.getController(), source, sa);
 
         if (sa.isCurse()) {
             if (defense < 0) { // try to destroy creatures
@@ -119,7 +122,10 @@ public class PumpAllAi extends PumpAiBase {
             }
 
             // evaluate both lists and pass only if human creatures are more valuable
-            boolean result = (ComputerUtilCard.evaluateCreatureList(comp) + 200) < ComputerUtilCard.evaluateCreatureList(human);
+            final int ours = ComputerUtilCard.evaluateCreatureList(comp), theirs = ComputerUtilCard.evaluateCreatureList(human);
+            boolean result = everyone
+                    ? ComputerUtilCard.sweeperPaysOff(theirs, ours, 250) || (theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa))
+                    : ours + 200 < theirs;
             return result ? new AiAbilityDecision(100, AiPlayDecision.WillPlay) : new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         } // end Curse
 
