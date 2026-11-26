@@ -685,7 +685,7 @@ public class AiBlockController {
             chumpBlockers.removeIf(c -> ComputerUtilCombat.shieldDamage(attackers.get(0), c) == 0);
         }
         if (!chumpBlockers.isEmpty()) {
-            final Card blocker = ComputerUtilCard.getWorstCreatureAI(chumpBlockers);
+            final Card blocker = chumpBlocker(chumpBlockers);
 
             // check if it's better to block a creature with lower power and without trample
             if (attacker.hasKeyword(Keyword.TRAMPLE)) {
@@ -713,6 +713,27 @@ public class AiBlockController {
         }
         attackers.remove(attacker);
         makeChumpBlocks(combat, attackers, !chumpBlockers.isEmpty());
+    }
+
+    /**
+     * The creature to chump with: one that is cheap to lose first, a token or a creature with a trigger of its own when it
+     * dies (Solemn Simulacrum, Junk Diver) or that comes back (persist, undying), as players chump with those and keep their
+     * real defenders; else the least valuable.
+     */
+    private static Card chumpBlocker(final List<Card> chumpBlockers) {
+        final List<Card> cheap = CardLists.filter(chumpBlockers, c -> c.isToken() || diesForValue(c)
+                || c.hasKeyword(Keyword.PERSIST) || (c.hasKeyword(Keyword.UNDYING) && c.getCounters(CounterEnumType.P1P1) == 0));
+        return ComputerUtilCard.getWorstCreatureAI(cheap.isEmpty() ? chumpBlockers : cheap);
+    }
+
+    private static boolean diesForValue(final Card c) {
+        for (final forge.game.trigger.Trigger t : c.getTriggers()) {
+            if (t.getMode() == forge.game.trigger.TriggerType.ChangesZone && "Battlefield".equals(t.getParam("Origin"))
+                    && "Graveyard".equals(t.getParam("Destination")) && "Card.Self".equals(t.getParam("ValidCard"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Block creatures with "can't be blocked except by two or more creatures"

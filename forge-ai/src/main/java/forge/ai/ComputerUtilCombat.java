@@ -491,6 +491,11 @@ public class ComputerUtilCombat {
             maxTreshold--;
         }
 
+        // With several opponents an attack that leaves a few life is lethal on the next opponent's turn: players chump
+        // before that, so the line is a quarter of the starting life (10 of 40) there.
+        if (ai.getOpponents().size() > 1) {
+            threshold = Math.max(threshold, ai.getStartingLife() / 4);
+        }
         return !ai.cantLoseForZeroOrLessLife() && lifeThatWouldRemain(ai, combat) - payment < Math.min(threshold, ai.getLife());
     }
 
