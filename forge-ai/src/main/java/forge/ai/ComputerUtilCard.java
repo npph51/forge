@@ -1577,7 +1577,7 @@ public class ComputerUtilCard {
 
         // an opponent's commander is the engine its deck is built around: players spend removal on it when it is out
         if (c.isCommander() && c.getController().isOpponentOf(ai)) {
-            threat = Math.max(threat, 0.6f);
+            threat = Math.max(threat, 1.0f);
         }
 
         final float valueNow = Math.max(valueTempo, threat);
