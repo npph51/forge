@@ -973,6 +973,67 @@ public class AiController {
     }
 
     /** The step of a loop (see {@link LoopRunner}): aimed already, so only the cost and an earlier failure are looked at. */
+    /**
+     * The combo planners that need no rollouts: named finishers, loops of the combo list and catalogued assembly.
+     * Run with Flat MC and, with {@link AiProps#COMBO_PLAY}, without it. Null when none of them plays now.
+     */
+    private SpellAbility comboPlays(final List<SpellAbility> list) {
+        final SpellAbility vault = VaultLoop.sureCast(player, list);
+        if (vault != null) {
+            return vault; // Time Vault and what untaps it: an extra turn every turn, no rollouts needed
+        }
+        final SpellAbility oracle = ConsultationWin.sureCast(player, list);
+        if (oracle != null) {
+            return oracle; // Thassa's Oracle with Demonic Consultation in hand: cast it, the Consultation answers its trigger
+        }
+        final SpellAbility pileDraw = DoomsdayPile.sureDraw(player, list);
+        if (pileDraw != null && !hasFailedToCast(pileDraw)) {
+            return pileDraw; // Doomsday has cut the library: draw through the pile to the Oracle
+        }
+        final SpellAbility will = WillReplay.sureCast(player, list);
+        if (will != null) {
+            return will; // Yawgmoth's Will with Time Walk, a Mox or Black Lotus in the graveyard
+        }
+        final SpellAbility orchard = OathTiming.sureCast(player);
+        if (orchard != null) {
+            return orchard; // Oath of Druids: the opponent is given a creature at its end step so that the upkeep trigger works
+        }
+        final SpellAbility dreadReturn = DreadReturnWin.sureCast(player, list);
+        if (dreadReturn != null) {
+            return dreadReturn; // Oops! All Spells: the flashback of Dread Return brings the Oracle back to an empty library
+        }
+        final SpellAbility donateFinish = DonateCombo.sureFinish(player, list);
+        if (donateFinish != null) {
+            if (!hasFailedToCast(donateFinish)) {
+                lastFlatMcResult = null;
+                return donateFinish; // Removing donated Illusions now makes the only opponent lose 20 life.
+            }
+            for (SpellAbility ability = donateFinish; ability != null; ability = ability.getSubAbility()) {
+                ability.resetTargets();
+            }
+            if (donateFinish.costHasManaX()) {
+                donateFinish.setXManaCostPaid(null);
+            }
+        }
+        final SpellAbility loop = LoopRunner.next(player, list, this::loopApproved);
+        if (loop != null) {
+            VetoLog.note(player, "loop-play " + loop.getHostCard().getName());
+            return loop; // a loop of the combo list is on the table: one more round of it
+        }
+        // the loop declined its finishers this time: they are for the turn that wins, not for a draw or a mill that falls short
+        final List<SpellAbility> rest = new ArrayList<>(list);
+        rest.removeIf(sa -> LoopRunner.keptForTheLoop(player, sa));
+        final SpellAbility finish = ComboAssembly.finish(player, rest, this::assemblyApproved);
+        if (finish != null) {
+            return finish; // a draw that takes the opponent's whole library: they lose at their next draw
+        }
+        final SpellAbility assembly = ComboAssembly.next(player, rest, this::assemblyApproved);
+        if (assembly != null) {
+            return assembly; // a catalogued combo whose other cards are all in play or in hand: put it together
+        }
+        return null;
+    }
+
     private boolean loopApproved(final SpellAbility sa) {
         try {
             sa.setActivatingPlayer(player);
@@ -2409,6 +2470,20 @@ public class AiController {
         // Flat MC compares them with rollouts, the heuristics still decide for every other card
         // Every other card marked AI:RemoveDeck:All stays in the list too, for Flat MC alone: see isFlatMcOnlyPlay
         final boolean flatMc = flatMonteCarloActive();
+        // The combo planners (named finishers, loops, catalogued assembly) also run without Flat MC (COMBO_PLAY):
+        // they need no rollouts. A card marked AI:RemoveDeck:All that is a piece of a catalogued combo is kept for
+        // them alone, never for the heuristics, which cannot play it well.
+        final boolean comboPlay = flatMc || (simMode == null && getBoolProperty(AiProps.COMBO_PLAY));
+        final List<SpellAbility> comboOnly = new ArrayList<>();
+        if (comboPlay && !flatMc) {
+            for (final SpellAbility sa : saList) {
+                final Card h = sa.getHostCard();
+                if (h != null && !sa.isLandAbility() && ComputerUtilCard.isCardRemAIDeck(h)
+                        && (ComboCatalog.isPiece(h) || deckPlan(player).combos.isKeyCard(h))) {
+                    comboOnly.add(sa);
+                }
+            }
+        }
         saList.removeIf(spellAbility -> {
             if (spellAbility.isLandAbility()) {
                 return true;
@@ -2435,59 +2510,23 @@ public class AiController {
         if (!skipped.isEmpty())
             saList.removeAll(skipped);
 
-        if (flatMc) {
-            final SpellAbility vault = VaultLoop.sureCast(player, saList);
-            if (vault != null) {
-                return vault; // Time Vault and what untaps it: an extra turn every turn, no rollouts needed
-            }
-            final SpellAbility oracle = ConsultationWin.sureCast(player, saList);
-            if (oracle != null) {
-                return oracle; // Thassa's Oracle with Demonic Consultation in hand: cast it, the Consultation answers its trigger
-            }
-            final SpellAbility pileDraw = DoomsdayPile.sureDraw(player, saList);
-            if (pileDraw != null && !hasFailedToCast(pileDraw)) {
-                return pileDraw; // Doomsday has cut the library: draw through the pile to the Oracle
-            }
-            final SpellAbility will = WillReplay.sureCast(player, saList);
-            if (will != null) {
-                return will; // Yawgmoth's Will with Time Walk, a Mox or Black Lotus in the graveyard
-            }
-            final SpellAbility orchard = OathTiming.sureCast(player);
-            if (orchard != null) {
-                return orchard; // Oath of Druids: the opponent is given a creature at its end step so that the upkeep trigger works
-            }
-            final SpellAbility dreadReturn = DreadReturnWin.sureCast(player, saList);
-            if (dreadReturn != null) {
-                return dreadReturn; // Oops! All Spells: the flashback of Dread Return brings the Oracle back to an empty library
-            }
-            final SpellAbility donateFinish = DonateCombo.sureFinish(player, saList);
-            if (donateFinish != null) {
-                if (!hasFailedToCast(donateFinish)) {
-                    lastFlatMcResult = null;
-                    return donateFinish; // Removing donated Illusions now makes the only opponent lose 20 life.
-                }
-                for (SpellAbility ability = donateFinish; ability != null; ability = ability.getSubAbility()) {
-                    ability.resetTargets();
-                }
-                if (donateFinish.costHasManaX()) {
-                    donateFinish.setXManaCostPaid(null);
+        if (comboPlay) {
+            final List<SpellAbility> comboList;
+            if (comboOnly.isEmpty()) {
+                comboList = saList;
+            } else {
+                comboList = new ArrayList<>(saList);
+                for (final SpellAbility sa : comboOnly) {
+                    if (!comboList.contains(sa)) {
+                        comboList.add(sa);
+                    }
                 }
             }
-            final SpellAbility loop = LoopRunner.next(player, saList, this::loopApproved);
-            if (loop != null) {
-                VetoLog.note(player, "loop-play " + loop.getHostCard().getName());
-                return loop; // a loop of the combo list is on the table: one more round of it
+            final SpellAbility combo = comboPlays(comboList);
+            if (combo != null) {
+                return combo;
             }
-            // the loop declined its finishers this time: they are for the turn that wins, not for a draw or a mill that falls short
             saList.removeIf(sa -> LoopRunner.keptForTheLoop(player, sa));
-            final SpellAbility finish = ComboAssembly.finish(player, saList, this::assemblyApproved);
-            if (finish != null) {
-                return finish; // a draw that takes the opponent's whole library: they lose at their next draw
-            }
-            final SpellAbility assembly = ComboAssembly.next(player, saList, this::assemblyApproved);
-            if (assembly != null) {
-                return assembly; // a catalogued combo whose other cards are all in play or in hand: put it together
-            }
         }
         if (flatMc && game.getStack().isEmpty()) {
             // Stiflenought: the Dreadnought is cast as soon as its Stifle can be paid for as well, without rollouts

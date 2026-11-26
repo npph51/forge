@@ -183,6 +183,8 @@ public enum AiProps {
     FLAT_MC_OPPONENT_LOOKAHEAD("0"),
     /** off, auto (read the deck) or one of aggro, burn, control, combo, ramp, midrange. */
     FLAT_MC_DECK_PLAN("auto"),
+    /** Play the deck's combos without Flat MC: the named finishers, loops and catalogued assembly need no rollouts. */
+    COMBO_PLAY("true"),
     /** Mulligan and bottom cards by the deck plan (see OpeningHand); also part of maximum strength. */
     FLAT_MC_MULLIGAN("true"),
     FLAT_MC_LAND_CHOICE("true"),
