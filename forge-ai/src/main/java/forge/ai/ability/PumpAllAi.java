@@ -63,6 +63,16 @@ public class PumpAllAi extends PumpAiBase {
             }
         }
 
+        // -X/-X for X life (Toxic Deluge): the script gives the AI no X, so it never cast it; pick the X that pays off best
+        if (sa.isCurse() && "-X".equals(sa.getParam("NumDef")) && "Count$xPaid".equals(sa.getSVar("X"))
+                && abCost != null && abCost.hasSpecificCostType(forge.game.cost.CostPayLife.class)) {
+            final Integer x = lifeSweeperX(ai, sa, source, sa.getParamOrDefault("ValidCards", ""));
+            if (x == null) {
+                return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+            }
+            sa.setXManaCostPaid(x);
+        }
+
         final int power = AbilityUtils.calculateAmount(source, sa.getParam("NumAtt"), sa);
         final int defense = AbilityUtils.calculateAmount(source, sa.getParam("NumDef"), sa);
         final List<String> keywords = sa.hasParam("KW") ? Arrays.asList(sa.getParam("KW").split(" & ")) : new ArrayList<>();
@@ -144,6 +154,35 @@ public class PumpAllAi extends PumpAiBase {
             return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
         }
         return result ? new AiAbilityDecision(100, AiPlayDecision.WillPlay) : new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+    }
+
+    /**
+     * The X for a "-X/-X to all creatures, pay X life" sweeper: of the toughnesses on the board, the one where the creatures it
+     * kills are worth most to the opponents against what it costs us (our creatures, and 15 per life point), never paying the
+     * AI under 10 life. Null when no X pays off by the usual sweeper rule.
+     */
+    static Integer lifeSweeperX(final Player ai, final SpellAbility sa, final Card source, final String valid) {
+        final boolean several = ai.getOpponents().size() > 1;
+        final CardCollection theirsAll = CardLists.getValidCards(ai.getOpponents().getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
+        final CardCollection oursAll = CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
+        final int most = ai.getLife() - 10;
+        Integer best = null;
+        int bestScore = Integer.MIN_VALUE;
+        java.util.TreeSet<Integer> toughness = new java.util.TreeSet<>();
+        for (Card c : theirsAll) if (c.isCreature() && c.getNetToughness() > 0) toughness.add(c.getNetToughness());
+        for (int x : toughness) {
+            if (x > most) break;
+            final CardCollection theirs = CardLists.filter(theirsAll, c -> c.getNetToughness() <= x);
+            final CardCollection ours = CardLists.filter(oursAll, c -> c.getNetToughness() <= x);
+            final int t = ComputerUtilCard.evaluateCreatureList(theirs), o = ComputerUtilCard.evaluateCreatureList(ours);
+            final boolean pays = several ? ComputerUtilCard.sweeperPaysOff(t, o, 250) : o + 200 < t;
+            final int score = t - o - 15 * x;
+            if (pays && score > bestScore) {
+                bestScore = score;
+                best = x;
+            }
+        }
+        return best;
     }
 
     @Override

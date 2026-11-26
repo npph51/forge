@@ -6,6 +6,8 @@ import forge.game.GameActionUtil;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
+import forge.game.card.CardLists;
+import forge.game.zone.ZoneType;
 import forge.game.keyword.Keyword;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
@@ -66,8 +68,12 @@ public class CharmAi extends SpellAbilityAi {
              * bonus choice(s) for the AI otherwise it might be too hard to ever fulfil
              * minimum choice requirements with canPlayAi() alone.
              */
-            chosenList = min > 1 ? chooseMultipleOptionsAi(sa, choices, ai, min)
-                    : chooseOptionsAi(sa, choices, ai, timingRight, num, min);
+            if (sa.isSpell() && min >= 1 && choices.size() <= 6 && choices.stream().allMatch(c -> c.getApi() == forge.game.ability.ApiType.DestroyAll)) {
+                chosenList = chooseSweeperModes(ai, sa, choices, num);
+            } else {
+                chosenList = min > 1 ? chooseMultipleOptionsAi(sa, choices, ai, min)
+                        : chooseOptionsAi(sa, choices, ai, timingRight, num, min);
+            }
         }
 
         if (chosenList.isEmpty()) {
@@ -102,6 +108,50 @@ public class CharmAi extends SpellAbilityAi {
         }
 
         return super.checkApiLogic(ai, sa);
+    }
+
+    /**
+     * A charm whose modes are all "destroy all …" (Austere Command): the modes chosen together are one sweeper, so each set of
+     * num modes is weighed as one: what it destroys of the opponents' against ours (a creature by its evaluation, anything
+     * else by 40 per mana value + 1), by the sweeper rule. Each mode alone had to be worth casting before, so a good creature
+     * mode beside a mode that hits nothing was never cast.
+     */
+    private List<AbilitySub> chooseSweeperModes(final Player ai, final SpellAbility sa, final List<AbilitySub> choices, final int num) {
+        final Card source = sa.getHostCard();
+        final boolean several = ai.getOpponents().size() > 1;
+        List<AbilitySub> best = Lists.newArrayList();
+        int bestGain = Integer.MIN_VALUE;
+        final int n = choices.size();
+        for (int mask = 1; mask < (1 << n); mask++) {
+            if (Integer.bitCount(mask) != Math.min(num, n)) continue;
+            final java.util.Set<Card> theirs = new java.util.HashSet<>(), ours = new java.util.HashSet<>();
+            final List<AbilitySub> pick = Lists.newArrayList();
+            for (int i = 0; i < n; i++) {
+                if ((mask & (1 << i)) == 0) continue;
+                final AbilitySub sub = choices.get(i);
+                sub.setActivatingPlayer(ai);
+                pick.add(sub);
+                final String valid = sub.getParamOrDefault("ValidCards", "");
+                theirs.addAll(CardLists.getValidCards(ai.getOpponents().getCardsIn(ZoneType.Battlefield), valid, ai, source, sub));
+                ours.addAll(CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, ai, source, sub));
+            }
+            final int t = sweptValue(theirs), o = sweptValue(ours);
+            final boolean pays = several ? ComputerUtilCard.sweeperPaysOff(t, o, 250) : t > o + 200;
+            if (pays && t - o > bestGain) {
+                bestGain = t - o;
+                best = pick;
+            }
+        }
+        return best;
+    }
+
+    private static int sweptValue(final java.util.Collection<Card> cards) {
+        int v = 0;
+        for (Card c : cards) {
+            if (c.hasKeyword(forge.game.keyword.Keyword.INDESTRUCTIBLE)) continue;
+            v += c.isCreature() ? ComputerUtilCard.evaluateCreature(c) : 40 * (c.getCMC() + 1);
+        }
+        return v;
     }
 
     private List<AbilitySub> chooseOptionsAi(SpellAbility sa, List<AbilitySub> choices, final Player ai, boolean isTrigger, int num, int min) {
