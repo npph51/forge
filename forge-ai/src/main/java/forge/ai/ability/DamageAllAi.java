@@ -180,7 +180,7 @@ public class  DamageAllAi extends SpellAbilityAi {
 
         final int theirs = ComputerUtilCard.evaluateCreatureList(humanList), ours = ComputerUtilCard.evaluateCreatureList(computerList);
         if (everyone && !sa.getPayCosts().isReusuableResource()) {
-            if (ComputerUtilCard.sweeperPaysOff(theirs, ours, Math.max(minGain, 250))) {
+            if (ComputerUtilCard.sweeperPaysOff(theirs, ours, ComputerUtilCard.SWEEP_MARGIN)) {
                 return theirs - ours;
             }
             return theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa) ? 1 : -1;

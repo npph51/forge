@@ -79,7 +79,7 @@ public class DestroyAllAi extends SpellAbilityAi {
             if (!opps.isEmpty() && !landsOnly) {
                 int theirs = creaturesOnly ? ComputerUtilCard.evaluateCreatureList(opps) : ComputerUtilCard.evaluatePermanentList(opps);
                 int ours = creaturesOnly ? ComputerUtilCard.evaluateCreatureList(mine) : ComputerUtilCard.evaluatePermanentList(mine);
-                if (ComputerUtilCard.sweeperPaysOff(theirs, ours, creaturesOnly ? 250 : 6)
+                if (ComputerUtilCard.sweeperPaysOff(theirs, ours, creaturesOnly ? ComputerUtilCard.SWEEP_MARGIN : 6)
                         || (theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa))) {
                     return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
                 }

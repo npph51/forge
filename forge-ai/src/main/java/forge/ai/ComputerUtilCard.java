@@ -927,6 +927,9 @@ public class ComputerUtilCard {
      * what we lose by the margin and is at least twice our loss. Judged against one opponent, the AI held its wipes while the
      * two others ran away with the game; a wipe that costs us as much as it costs one of three opponents still leaves two ahead.
      */
+    /** The margin a sweeper must win by, in creature evaluation: a little under one ordinary creature (about 180). */
+    public static final int SWEEP_MARGIN = 150;
+
     public static boolean sweeperPaysOff(final int theirs, final int ours, final int margin) {
         return theirs > ours + margin && theirs >= 2 * ours;
     }

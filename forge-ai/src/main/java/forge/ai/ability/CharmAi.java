@@ -136,7 +136,7 @@ public class CharmAi extends SpellAbilityAi {
                 ours.addAll(CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, ai, source, sub));
             }
             final int t = sweptValue(theirs), o = sweptValue(ours);
-            final boolean pays = several ? ComputerUtilCard.sweeperPaysOff(t, o, 250) : t > o + 200;
+            final boolean pays = several ? ComputerUtilCard.sweeperPaysOff(t, o, ComputerUtilCard.SWEEP_MARGIN) : t > o + 200;
             if (pays && t - o > bestGain) {
                 bestGain = t - o;
                 best = pick;

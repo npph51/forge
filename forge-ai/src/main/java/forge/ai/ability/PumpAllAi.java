@@ -63,8 +63,12 @@ public class PumpAllAi extends PumpAiBase {
             }
         }
 
+        // a -N/-N or -X/-X to all creatures is harmful whether or not its script says IsCurse (Toxic Deluge, Cloudkill, Terror
+        // Tide do not): without it the AI weighed it as a pump of its own creatures and never cast it as a sweeper
+        final boolean curse = sa.isCurse() || sa.getParamOrDefault("NumDef", "").trim().startsWith("-");
+
         // -X/-X for X life (Toxic Deluge): the script gives the AI no X, so it never cast it; pick the X that pays off best
-        if (sa.isCurse() && "-X".equals(sa.getParam("NumDef")) && "Count$xPaid".equals(sa.getSVar("X"))
+        if (curse && "-X".equals(sa.getParam("NumDef")) && "Count$xPaid".equals(sa.getSVar("X"))
                 && abCost != null && abCost.hasSpecificCostType(forge.game.cost.CostPayLife.class)) {
             final Integer x = lifeSweeperX(ai, sa, source, sa.getParamOrDefault("ValidCards", ""));
             if (x == null) {
@@ -82,11 +86,11 @@ public class PumpAllAi extends PumpAiBase {
 
         CardCollection comp = CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
         // a -X/-X to every creature hits every opponent's board, not only the strongest opponent's
-        final boolean everyone = sa.isCurse() && ai.getOpponents().size() > 1;
+        final boolean everyone = curse && ai.getOpponents().size() > 1;
         CardCollection human = CardLists.getValidCards((everyone ? ai.getOpponents().getCardsIn(ZoneType.Battlefield) : opp.getCardsIn(ZoneType.Battlefield)),
                 valid, source.getController(), source, sa);
 
-        if (sa.isCurse()) {
+        if (curse) {
             if (defense < 0) { // try to destroy creatures
                 comp = CardLists.filter(comp, c -> {
                     if (c.getNetToughness() <= -defense) {
@@ -134,7 +138,7 @@ public class PumpAllAi extends PumpAiBase {
             // evaluate both lists and pass only if human creatures are more valuable
             final int ours = ComputerUtilCard.evaluateCreatureList(comp), theirs = ComputerUtilCard.evaluateCreatureList(human);
             boolean result = everyone
-                    ? ComputerUtilCard.sweeperPaysOff(theirs, ours, 250) || (theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa))
+                    ? ComputerUtilCard.sweeperPaysOff(theirs, ours, ComputerUtilCard.SWEEP_MARGIN) || (theirs > ours && ComputerUtilCard.wouldDiscardAtCleanup(ai, sa))
                     : ours + 200 < theirs;
             return result ? new AiAbilityDecision(100, AiPlayDecision.WillPlay) : new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         } // end Curse
@@ -158,14 +162,14 @@ public class PumpAllAi extends PumpAiBase {
 
     /**
      * The X for a "-X/-X to all creatures, pay X life" sweeper: of the toughnesses on the board, the one where the creatures it
-     * kills are worth most to the opponents against what it costs us (our creatures, and 15 per life point), never paying the
-     * AI under 10 life. Null when no X pays off by the usual sweeper rule.
+     * kills are worth most to the opponents against what it costs us (our creatures, and 15 per life point), keeping the AI at
+     * 10 life or half of a lower total. Null when no X pays off by the usual sweeper rule.
      */
     static Integer lifeSweeperX(final Player ai, final SpellAbility sa, final Card source, final String valid) {
         final boolean several = ai.getOpponents().size() > 1;
         final CardCollection theirsAll = CardLists.getValidCards(ai.getOpponents().getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
         final CardCollection oursAll = CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
-        final int most = ai.getLife() - 10;
+        final int most = ai.getLife() - Math.min(10, (ai.getLife() + 1) / 2);   // keep 10 life, or half of a low total (a wipe can be what keeps it alive)
         Integer best = null;
         int bestScore = Integer.MIN_VALUE;
         java.util.TreeSet<Integer> toughness = new java.util.TreeSet<>();
@@ -175,7 +179,7 @@ public class PumpAllAi extends PumpAiBase {
             final CardCollection theirs = CardLists.filter(theirsAll, c -> c.getNetToughness() <= x);
             final CardCollection ours = CardLists.filter(oursAll, c -> c.getNetToughness() <= x);
             final int t = ComputerUtilCard.evaluateCreatureList(theirs), o = ComputerUtilCard.evaluateCreatureList(ours);
-            final boolean pays = several ? ComputerUtilCard.sweeperPaysOff(t, o, 250) : o + 200 < t;
+            final boolean pays = several ? ComputerUtilCard.sweeperPaysOff(t, o, ComputerUtilCard.SWEEP_MARGIN) : o + 200 < t;
             final int score = t - o - 15 * x;
             if (pays && score > bestScore) {
                 bestScore = score;
