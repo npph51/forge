@@ -261,6 +261,25 @@ public class AiAttackController {
                 if (opp.cantLoseForZeroOrLessLife()) {
                     score -= 50;
                 }
+                // Players attack where the damage gets through: an opponent's untapped creatures that could block count
+                // against attacking it (half their value), and an opponent the attack can kill this turn comes first.
+                int power = 0;
+                for (Card c : ai.getCreaturesInPlay()) {
+                    if (CombatUtil.canAttack(c, opp)) {
+                        power += Math.max(0, c.getNetCombatDamage());
+                    }
+                }
+                int blockerValue = 0, blockerToughness = 0;
+                for (Card b : opp.getCreaturesInPlay()) {
+                    if (b.isUntapped() && CombatUtil.canBlock(b)) {
+                        blockerValue += ComputerUtilCard.evaluateCreature(b);
+                        blockerToughness += Math.max(0, b.getNetToughness());
+                    }
+                }
+                score -= blockerValue / 2;
+                if (power > 0 && life > 0 && opp.canLoseLife() && power - blockerToughness >= life) {
+                    score += 1000;
+                }
             }
             threatScores.put(opp, score);
         }
