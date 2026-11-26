@@ -1588,6 +1588,11 @@ public class ComputerUtilCard {
         if (valueNow < 0.2) { //hard floor to reduce ridiculous odds for instants over time
             return false;
         }
+        // With several opponents the removal is spent on a real threat when it is there, not on a roll of the dice against its
+        // score (players do not flip a coin over an Archfiend of Despair): from 0.5 it is cast, under it held.
+        if (ai.getOpponents().size() > 1) {
+            return valueNow >= 0.5f;
+        }
         final float chance = MyRandom.getRandom().nextFloat();
         return chance < valueNow;
     }
