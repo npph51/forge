@@ -63,6 +63,34 @@ public class PumpAllAi extends PumpAiBase {
             }
         }
 
+        // "pay X life: all creatures get -X/-X" (Toxic Deluge): pick the X that kills the most of the opponents' creatures
+        // against ours, keeping enough life; with no X chosen it read as -0/-0 and was never cast
+        if ("-X".equals(sa.getParam("NumDef")) && "Count$xPaid".equals(source.getSVar("X")) && abCost != null
+                && abCost.hasSpecificCostType(forge.game.cost.CostPayLife.class) ) {
+            final int spare = ai.getLife() - Math.max(5, ai.getStartingLife() / 8);
+            int bestX = 0, best = 0;
+            for (int x = 1; x <= Math.min(spare, 20); x++) {
+                final int k = x;
+                int theirs = ComputerUtilCard.evaluateCreatureList(CardLists.filter(
+                        CardLists.getValidCards(ai.getOpponents().getCardsIn(ZoneType.Battlefield), sa.getParam("ValidCards"), ai, source, sa),
+                        c -> c.getNetToughness() <= k));
+                int ours = ComputerUtilCard.evaluateCreatureList(CardLists.filter(
+                        CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), sa.getParam("ValidCards"), ai, source, sa),
+                        c -> c.getNetToughness() <= k));
+                // each point of life paid counts as a little value, so the smallest X that does the job wins
+                int gain = theirs - ours - 200 - 10 * x;
+                if (gain > best) {
+                    best = gain;
+                    bestX = x;
+                }
+            }
+            if (bestX == 0) {
+                return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+            }
+            sa.setXManaCostPaid(bestX);
+            return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
+        }
+
         final int power = AbilityUtils.calculateAmount(source, sa.getParam("NumAtt"), sa);
         final int defense = AbilityUtils.calculateAmount(source, sa.getParam("NumDef"), sa);
         final List<String> keywords = sa.hasParam("KW") ? Arrays.asList(sa.getParam("KW").split(" & ")) : new ArrayList<>();
@@ -122,8 +150,12 @@ public class PumpAllAi extends PumpAiBase {
             	return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
             }
 
-            // evaluate both lists and pass only if human creatures are more valuable
-            boolean result = (ComputerUtilCard.evaluateCreatureList(comp) + 200) < ComputerUtilCard.evaluateCreatureList(human);
+            // evaluate both lists and pass only if human creatures are more valuable; a trigger (Massacre Wurm entering) costs
+            // nothing of its own, so it only has to do no more harm to us than to them, or the creature stays in hand
+            int margin = sa.isTrigger() ? 0 : 200;
+            int ours = ComputerUtilCard.evaluateCreatureList(comp);
+            int theirs = ComputerUtilCard.evaluateCreatureList(human);
+            boolean result = sa.isTrigger() ? ours <= theirs : ours + margin < theirs;
             return result ? new AiAbilityDecision(100, AiPlayDecision.WillPlay) : new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
         } // end Curse
 
