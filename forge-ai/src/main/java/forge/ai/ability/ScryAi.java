@@ -100,7 +100,8 @@ public class ScryAi extends SpellAbilityAi {
         // in the playerturn Scry should only be done in Main1 or in upkeep if able
         if (ph.isPlayerTurn(ai)) {
             if (isSorcerySpeed(sa, ai)) {
-                return ph.is(PhaseType.MAIN1) || sa.isPwAbility();
+                // a scry that then draws (Read the Bones, Preordain) is a draw spell: the second main phase is as good
+                return ph.is(PhaseType.MAIN1) || sa.isPwAbility() || (drawsAfter(sa) && ph.is(PhaseType.MAIN2));
             } else {
                 return ph.is(PhaseType.UPKEEP);
             }
@@ -161,6 +162,10 @@ public class ScryAi extends SpellAbilityAi {
         if (playReusable(ai, sa)) {
             randomReturn = true;
         }
+        // a sorcery-speed scry that then draws cards is card advantage, not only selection: no coin toss for it
+        if (isSorcerySpeed(sa, ai) && drawsAfter(sa)) {
+            randomReturn = true;
+        }
 
         if (sa.usesTargeting()) {
             sa.resetTargets();
@@ -188,6 +193,16 @@ public class ScryAi extends SpellAbilityAi {
             return new AiAbilityDecision(100, AiPlayDecision.WillPlay);
         }
         return new AiAbilityDecision(0, AiPlayDecision.CantPlayAi);
+    }
+
+    /** Whether this scry is followed by drawing cards in the same spell or ability (Read the Bones, Preordain, Opt). */
+    static boolean drawsAfter(final SpellAbility sa) {
+        for (SpellAbility sub = sa.getSubAbility(); sub != null; sub = sub.getSubAbility()) {
+            if (sub.getApi() == ApiType.Draw) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
