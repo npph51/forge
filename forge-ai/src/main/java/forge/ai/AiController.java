@@ -356,6 +356,11 @@ public class AiController {
             }
             SpellAbility exSA = re.getOverridingAbility();
 
+            // "As this enters, choose a colour / creature type / …" is a choice the card asks for, never a reason to keep it in hand
+            // (Utopia Sprawl in a deck of green alone found no colour worth naming and was never cast)
+            if (exSA != null && exSA.getApi() != null && exSA.getApi().name().startsWith("Choose") && exSA.getSubAbility() == null) {
+                continue;
+            }
             if (exSA != null) {
                 exSA = exSA.copy(activator);
 

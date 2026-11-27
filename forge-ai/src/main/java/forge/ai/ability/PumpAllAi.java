@@ -71,7 +71,11 @@ public class PumpAllAi extends PumpAiBase {
         final String valid = sa.getParamOrDefault("ValidCards", "");
 
         CardCollection comp = CardLists.getValidCards(ai.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
-        CardCollection human = CardLists.getValidCards(opp.getCardsIn(ZoneType.Battlefield), valid, source.getController(), source, sa);
+        // an untargeted effect reaches every opponent (Massacre Wurm, Elesh Norn): weigh all of their creatures, not only the
+        // strongest opponent's, or in Commander a -2/-2 that kills half the table reads as killing nothing worth it
+        CardCollection human = CardLists.getValidCards(
+                (sa.usesTargeting() ? opp.getCardsIn(ZoneType.Battlefield) : ai.getOpponents().getCardsIn(ZoneType.Battlefield)),
+                valid, source.getController(), source, sa);
 
         if (sa.isCurse()) {
             if (defense < 0) { // try to destroy creatures
